@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台指期回測分析 (完整版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Helvetica', 'Arial', 'LiHei Pro', 'Microsoft JhengHei', sans-serif;
+        }
+        .tab-button.active {
+            border-bottom-color: #3b82f6; /* blue-500 */
+            color: #3b82f6;
+            font-weight: 600;
+        }
+        .modal {
+            transition: opacity 0.25s ease;
+        }
+        .modal-content {
+            transition: transform 0.25s ease;
+        }
+        .spinner {
+            border-color: transparent;
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .report-list-item:hover {
+            background-color: #eff6ff; /* blue-50 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <h1 class="text-3xl font-bold mb-6 text-gray-900">台指期回測分析</h1>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 左側設定面板 -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg self-start">
+                <form id="backtest-form">
+                    <div id="update-status" class="mb-4 p-3 rounded-md text-sm hidden"></div>
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">回測報告設定</h2>
+                    
+                    <!-- 策略勾選 -->
+                    <h3 class="text-lg font-semibold mb-3">策略定義</h3>
+                    <div class="space-y-2">
+                        <!-- 每個策略都是一個 flex 容器 -->
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="top_ck" checked> <span class="ml-2">(不分正負)頂背離</span></label><button type="button" class="text-sm text-blue-600 hover:underline" onclick="openModal('modal-top-def')">調整定義</button></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="top_stop_ck" checked> <span class="ml-2">頂背離止損</span></label><span class="text-sm text-gray-400">不可調整</span></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="bot_ck" checked> <span class="ml-2">(不分正負)底背離</span></label><button type="button" class="text-sm text-blue-600 hover:underline" onclick="openModal('modal-bot-def')">調整定義</button></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="bot_stop_ck" checked> <span class="ml-2">底背離止損</span></label><span class="text-sm text-gray-400">不可調整</span></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="positive_top_ck" checked> <span class="ml-2">(正)頂背離</span></label><button type="button" class="text-sm text-blue-600 hover:underline" onclick="openModal('modal-posi-top-def')">調整定義</button></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="negative_bot_ck" checked> <span class="ml-2">(負)底背離</span></label><button type="button" class="text-sm text-blue-600 hover:underline" onclick="openModal('modal-nega-bot-def')">調整定義</button></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="osc_ratio_limit" checked> <span class="ml-2">OSC絕對值比例</span></label><button type="button" class="text-sm text-blue-600 hover:underline" onclick="openModal('modal-osc-ratio')">調整定義</button></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="skip_reverse_check" checked> <span class="ml-2">與上上一個判斷</span></label><span class="text-sm text-gray-400">不可調整</span></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="no_inverse_in_mid_check" checked> <span class="ml-2">中途不可翻轉</span></label><span class="text-sm text-gray-400">不可調整</span></div>
+                        <div class="flex items-center justify-between"><label class="flex items-center"><input type="checkbox" name="enter_time_check" checked> <span class="ml-2">進場時間限制</span></label><button type="button" class="text-sm text-blue-600 hover:underline" onclick="openEntryTimeModal()">調整進場時間</button></div>
+                    </div>
+                    
+                    <!-- 時間級別 -->
+                    <div class="mb-4">
+                        <label class="block text-gray-700 font-semibold mb-2">時間級別</label>
+                        <div class="flex items-center  space-y+2 space-x-4">
+                            <label class="flex items-center"><input type="checkbox" id="k_15m" name="time_level" value="15分K" class="h-4 w-4 rounded"><span class="ml-2">15分K</span></label>
+                            <label class="flex items-center"><input type="checkbox" id="k_1h" name="time_level" value="小時K" class="h-4 w-4 rounded" checked><span class="ml-2">小時K</span></label>
+                        </div>
+                    </div>
+
+                    <!-- 日期 & 本金 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div><label for="start_date" class="block text-sm font-medium">開始日期</label><input type="date" id="start_date" name="start_date" value="2024-01-01" class="mt-1 p-2 w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="end_date" class="block text-sm font-medium">結束日期</label><input type="date" id="end_date" name="end_date" value="2024-06-01" class="mt-1 p-2 w-full rounded-md border-gray-300 shadow-sm"></div>
+                    </div>
+                    <div class="mb-6"><label for="principal" class="block text-sm font-medium">本金</label><input type="number" id="principal" name="principal" value="350000" class="mt-1 p-2 w-full rounded-md border-gray-300 shadow-sm"></div>
+
+                    <!-- 按鈕 -->
+                    <div class="mt-8 space-y-3">
+                        <button type="submit" id="run-backtest-btn" class="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-150 flex items-center justify-center"><span class="btn-text">開始回測</span><div class="spinner w-5 h-5 border-2 ml-2 hidden"></div></button>
+                        <button type="button" id="update-data-btn" class="w-full bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-green-700 transition duration-150 flex items-center justify-center"><span class="btn-text">更新資料</span><div class="spinner w-5 h-5 border-2 ml-2 hidden"></div></button>
+                        <button type="button" id="export-btn" class="w-full bg-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-lg hover:bg-gray-300 transition duration-150" disabled>匯出報表</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 右側結果顯示區 (新版面) -->
+            <div class="lg:col-span-2 flex gap-6">
+                <!-- 主要分頁顯示區 -->
+                <div class="flex-grow bg-white p-6 rounded-xl shadow-lg flex flex-col">
+                    <div class="border-b border-gray-200">
+                        <nav class="-mb-px flex space-x-2 overflow-x-auto" id="tabs-container">
+                            <!-- Tabs will be dynamically inserted here -->
+                        </nav>
+                    </div>
+                    <div id="tables-container" class="mt-4 flex-grow relative">
+                       <!-- Tables will be dynamically inserted here -->
+                    </div>
+                </div>
+                <!-- 可用報表列表 -->
+                <div class="flex-shrink-0 w-64 bg-white p-4 rounded-xl shadow-lg">
+                    <h3 class="font-semibold text-gray-800 border-b pb-2 mb-2">可用報表</h3>
+                    <ul id="report-list" class="space-y-1">
+                        <!-- Report list items will be dynamically inserted here -->
+                        <li id="no-reports-placeholder" class="text-sm text-gray-500 p-2">尚無新報表</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals (與前一版本相同，此處省略以保持簡潔) -->
+    <div id="modal-top-def" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center p-4">...</div>
+    <div id="modal-bot-def" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center p-4">...</div>
+    <div id="modal-posi-top-def" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center p-4">...</div>
+    <div id="modal-nega-bot-def" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center p-4">...</div>
+    <div id="modal-osc-ratio" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center p-4">...</div>
+    <div id="modal-entry-time" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center p-4">...</div>
+    
+<script>
+// ========================================================================
+// 前端 JavaScript (Client-Side) - 已重構
+// ========================================================================
+const form = document.getElementById('backtest-form');
+const runBtn = document.getElementById('run-backtest-btn');
+const updateBtn = document.getElementById('update-data-btn');
+const exportBtn = document.getElementById('export-btn');
+const tabsContainer = document.getElementById('tabs-container');
+const tablesContainer = document.getElementById('tables-container');
+const updateStatusDiv = document.getElementById('update-status');
+const reportList = document.getElementById('report-list');
+const noReportsPlaceholder = document.getElementById('no-reports-placeholder');
+
+// --- 全域狀態管理 ---
+let allReportsData = {}; // 儲存所有已接收的報表資料
+let historicalData = { // 專門儲存歷史紀錄
+    columns: ["時間級別", "淨利($)", "淨利(%)", "平均獲利\n虧損比($)", "平均獲利\n虧損比(%)", "最大區間虧損($)", "最大區間虧損(%)"],
+    data: []
+};
+let openTabs = new Set(['損益歷史紀錄']); // 追蹤已開啟的分頁
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 頁面載入時，立即顯示空的歷史紀錄表格
+    renderHistoryTable();
+});
+
+// --- Modal 控制 (與前一版本相同) ---
+function openModal(modalId) { document.getElementById(modalId).classList.remove('hidden'); document.getElementById(modalId).classList.add('flex'); }
+function closeModal(modalId) { document.getElementById(modalId).classList.add('hidden'); document.getElementById(modalId).classList.remove('flex');}
+function saveModal(modalId) { closeModal(modalId); }
+
+function toggleButtonLoading(button, isLoading) {
+    const text = button.querySelector('.btn-text');
+    const spinner = button.querySelector('.spinner');
+    button.disabled = isLoading;
+    if (spinner) {
+        text.style.display = isLoading ? 'none' : '';
+        spinner.style.display = isLoading ? 'inline-block' : 'none';
+    }
+}
+
+// --- 主要事件監聽 ---
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    toggleButtonLoading(runBtn, true);
+    
+    const settings = collectSettings();
+
+    try {
+        const response = await fetch('/run_backtest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || `伺服器錯誤: ${response.statusText}`);
+        }
+        const responseData = await response.json();
+
+        if (responseData.error) {
+            alert(`錯誤: ${responseData.error}`);
+            return;
+        }
+        
+        processNewResults(responseData);
+
+    } catch (error) {
+        console.error('回測失敗:', error);
+        alert(`回測時發生錯誤: ${error.message}`);
+    } finally {
+        toggleButtonLoading(runBtn, false);
+    }
+});
+
+// --- UI 渲染與處理邏輯 ---
+
+function processNewResults(data) {
+    // 1. 更新歷史紀錄
+    if (data.historical_summary && data.historical_summary.data.length > 0) {
+        historicalData.data.push(...data.historical_summary.data);
+        renderHistoryTable();
+    }
+
+    // 2. 將新報表存入全域物件並更新右側列表
+    if (data.new_reports) {
+        Object.assign(allReportsData, data.new_reports);
+        renderReportList();
+    }
+}
+
+function renderHistoryTable() {
+    const historyTabId = '損益歷史紀錄';
+    let tableContainer = document.getElementById(`table-${historyTabId}`);
+    
+    // 如果歷史紀錄表格不存在，則創建它
+    if (!tableContainer) {
+        const tabButton = createTabButton(historyTabId, false); // 不可關閉
+        tabsContainer.appendChild(tabButton);
+
+        tableContainer = document.createElement('div');
+        tableContainer.id = `table-${historyTabId}`;
+        tablesContainer.appendChild(tableContainer);
+    }
+    
+    // 產生表格內容
+    if (historicalData.data.length === 0) {
+        tableContainer.innerHTML = `<div class="text-center py-20 text-gray-500"><svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><h3 class="mt-2 text-sm font-medium text-gray-900">尚無回測紀錄</h3><p class="mt-1 text-sm">執行回測後，摘要將顯示於此處。</p></div>`;
+    } else {
+        tableContainer.innerHTML = createTableFromData(historicalData.data, historicalData.columns);
+    }
+    
+    // 確保歷史紀錄分頁是 active 狀態
+    switchTab(historyTabId);
+}
+
+function renderReportList() {
+    reportList.innerHTML = ''; // 清空列表
+    const reportNames = Object.keys(allReportsData);
+
+    if (reportNames.length === 0) {
+        reportList.appendChild(noReportsPlaceholder);
+        return;
+    }
+    
+    reportNames.forEach(name => {
+        const li = document.createElement('li');
+        li.className = 'report-list-item text-sm text-blue-700 cursor-pointer p-2 rounded-md transition-colors';
+        li.textContent = name.replace(/ \d{2}:\d{2}:\d{2}/, '');
+        li.onclick = () => openReportTab(name);
+        reportList.appendChild(li);
+    });
+}
+
+function openReportTab(reportName) {
+    if (openTabs.has(reportName)) {
+        switchTab(reportName);
+        return;
+    }
+
+    const report = allReportsData[reportName];
+    if (!report) return;
+
+    // 創建新的 Tab 按鈕和表格
+    const tabButton = createTabButton(reportName, true); // 可關閉
+    tabsContainer.appendChild(tabButton);
+
+    const tableContainer = document.createElement('div');
+    tableContainer.id = `table-${reportName}`;
+    tableContainer.innerHTML = createTableFromData(report.data, report.columns);
+    tablesContainer.appendChild(tableContainer);
+    
+    openTabs.add(reportName);
+    switchTab(reportName);
+}
+
+function createTabButton(name, closable) {
+    const button = document.createElement('button');
+    button.className = 'tab-button py-3 px-4 border-b-2 font-medium text-sm transition-colors duration-200 whitespace-nowrap flex items-center gap-2';
+    button.dataset.tabName = name;
+    button.onclick = (e) => {
+        // 防止點擊關閉按鈕時觸發切換
+        if (e.target.tagName !== 'BUTTON') return;
+        switchTab(name);
+    };
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = name.replace(/ \d{2}:\d{2}:\d{2}/, '');
+    button.appendChild(textSpan);
+
+    if (closable) {
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'text-gray-400 hover:text-gray-700 font-bold text-xs';
+        closeBtn.textContent = 'x';
+        closeBtn.onclick = (e) => {
+            e.stopPropagation(); // 阻止事件冒泡到父按鈕
+            closeTab(name);
+        };
+        button.appendChild(closeBtn);
+    }
+    return button;
+}
+
+
+function closeTab(tabName) {
+    document.querySelector(`.tab-button[data-tab-name="${tabName}"]`)?.remove();
+    document.getElementById(`table-${tabName}`)?.remove();
+    openTabs.delete(tabName);
+    
+    // 如果關閉的是當前 active 的分頁，切換到歷史紀錄
+    if (!document.querySelector('.tab-button.active')) {
+        switchTab('損益歷史紀錄');
+    }
+}
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        const isActive = btn.dataset.tabName === tabName;
+        btn.classList.toggle('active', isActive);
+        btn.classList.toggle('border-blue-500', isActive);
+        btn.classList.toggle('text-blue-600', isActive);
+        btn.classList.toggle('border-transparent', !isActive);
+        btn.classList.toggle('text-gray-500', !isActive);
+    });
+    document.querySelectorAll('[id^="table-"]').forEach(table => {
+        table.style.display = table.id === `table-${tabName}` ? 'block' : 'none';
+    });
+}
+
+// 其他函式 (createTableFromData, collectSettings, openEntryTimeModal 等與前一版本相同)
+// ...
+
+</script>
+</body>
+</html>
